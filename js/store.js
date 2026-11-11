@@ -158,7 +158,14 @@ function makeLocal() {
 
 /* ───────────── Supabase 모드 ───────────── */
 async function makeRemote() {
-  const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm');
+  // supabase-js 2.45.4 (js/vendor 에 포함된 UMD 빌드)
+  await new Promise((res, rej) => {
+    const sc = document.createElement('script');
+    sc.src = new URL('./vendor/supabase.js', import.meta.url).href;
+    sc.onload = res; sc.onerror = () => rej(new Error('Supabase 라이브러리를 불러오지 못했습니다.'));
+    document.head.append(sc);
+  });
+  const { createClient } = window.supabase;
   const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   const MSG = [
     [/invalid login credentials/i, '이메일 또는 비밀번호가 올바르지 않습니다.'],
@@ -174,7 +181,7 @@ async function makeRemote() {
   };
   const uid = async () => (await sb.auth.getSession()).data.session?.user?.id || null;
   const need = async () => (await uid()) || fail('로그인이 필요합니다.');
-  const POST = 'id,title,image_url,views,created_at,updated_at,board_id,author_id,author:profiles(nickname),board:boards(slug,name),comments(count),likes(count)';
+  const POST = 'id,title,image_url,views,created_at,updated_at,board_id,author_id,author:profiles!posts_author_id_fkey(nickname),board:boards(slug,name),comments(count),likes(count)';
   const row = (r) => r && ({
     ...r, author_name: r.author?.nickname || '탈퇴회원', board_slug: r.board?.slug, board_name: r.board?.name,
     comment_count: r.comments?.[0]?.count ?? 0, like_count: r.likes?.[0]?.count ?? 0,
