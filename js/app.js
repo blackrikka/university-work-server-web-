@@ -28,6 +28,8 @@ const ICON = {
 };
 const boardIcon = (b) => (b.slug === 'notice' ? ICON.notice : ICON[b.type] || ICON.list);
 
+const PAL = ['var(--blue)', 'var(--pink)', 'var(--mint)', 'var(--amber)', 'var(--violet)', 'var(--coral)'];
+const ac = (boardId) => { const i = boards.findIndex((b) => b.id === boardId); return `--ac:${PAL[(i < 0 ? 0 : i) % PAL.length]}`; };
 let me = null, boards = [];
 const canWrite = (b) => !!me && (b.write_role === 'member' || me.role === 'admin');
 
@@ -52,7 +54,7 @@ const userChip = () => me
   ? `<a class="pill link" href="#/me">${ICON.user}<b>${esc(me.nickname)}</b></a><button class="pill link" data-act="logout">로그아웃</button>`
   : `<a class="pill link" href="#/login">로그인</a><a class="pill link solid" href="#/signup">회원가입</a>`;
 
-const shell = (title, sub, back, body) => `${sky()}<div class="page">
+const shell = (title, sub, back, body, accent = '') => `${sky()}<div class="page" style="${accent}">
   <header class="topbar">
     <a class="back" href="${back}" aria-label="뒤로">${ICON.back}</a>
     <div class="ttl"><h1>${esc(title)}</h1>${sub ? `<span>${esc(sub)}</span>` : ''}</div>
@@ -76,7 +78,7 @@ function postList(items, { showBoard, type }) {
       <b>${esc(p.title)}</b><small>${esc(p.author_name)} · ${fmt(p.created_at)}</small></a>`).join('')}</div>`;
   }
   return `<ul class="plist">${items.map((p) => `<li><a href="#/p/${p.id}">
-    ${showBoard ? `<span class="tag">${esc(p.board_name)}</span>` : ''}
+    ${showBoard ? `<span class="tag" style="${ac(p.board_id)}">${esc(p.board_name)}</span>` : ''}
     ${type === 'qna' ? `<span class="tag ${p.comment_count ? 'done' : 'wait'}">${p.comment_count ? '답변완료' : '답변대기'}</span>` : ''}
     <span class="t">${esc(p.title)}${p.comment_count ? ` <em>[${p.comment_count}]</em>` : ''}</span>
     <span class="m">${esc(p.author_name)}</span><span class="m n">${ICON.eye}${p.views}</span>
@@ -103,8 +105,8 @@ async function vLobby() {
     </a>
     <div class="res">
       <span class="pill" title="전체 글">${ICON.post}<b>${st.posts}</b></span>
-      <span class="pill" title="전체 댓글">${ICON.chat}<b>${st.comments}</b></span>
-      <span class="pill" title="회원 수">${ICON.user}<b>${st.members}</b></span>
+      <span class="pill" style="--ac:var(--pink)" title="전체 댓글">${ICON.chat}<b>${st.comments}</b></span>
+      <span class="pill" style="--ac:var(--mint)" title="회원 수">${ICON.user}<b>${st.members}</b></span>
       ${me?.role === 'admin' ? `<a class="pill link ico" href="#/admin" aria-label="게시판 관리">${ICON.gear}</a>` : ''}
       ${me ? `<button class="pill link" data-act="logout">로그아웃</button>` : `<a class="pill link" href="#/login">로그인</a><a class="pill link solid" href="#/signup">회원가입</a>`}
     </div>
@@ -123,13 +125,13 @@ async function vLobby() {
     <section class="feed">
       <h2><span>NEW</span> 최신글<a href="#/all">전체보기</a></h2>
       ${rc.items.length ? rc.items.map((p) => `<a class="row" href="#/p/${p.id}">
-        <span class="tag">${esc(p.board_name)}</span><span class="t">${esc(p.title)}${p.comment_count ? ` <em>[${p.comment_count}]</em>` : ''}</span>
+        <span class="tag" style="${ac(p.board_id)}">${esc(p.board_name)}</span><span class="t">${esc(p.title)}${p.comment_count ? ` <em>[${p.comment_count}]</em>` : ''}</span>
         <time>${fmt(p.created_at)}</time></a>`).join('') : '<p class="empty sm">첫 글을 남겨보세요.</p>'}
     </section>
   </div>
 
   <nav class="hud-bottom" aria-label="게시판">
-    <div class="dock">${boards.map((b) => `<a class="dbtn" href="#/b/${esc(b.slug)}"><span>${boardIcon(b)}<b>${esc(b.name)}</b></span></a>`).join('')}</div>
+    <div class="dock">${boards.map((b) => `<a class="dbtn" style="${ac(b.id)}" href="#/b/${esc(b.slug)}"><span>${boardIcon(b)}<b>${esc(b.name)}</b></span></a>`).join('')}</div>
     <a class="big" href="#/all"><span>${ICON.all}<b>전체 게시판</b><small>ALL BOARDS</small></span></a>
   </nav>
   ${store.mode === 'local' ? '<p class="demo">데모 모드 · 데이터가 이 브라우저에만 저장됩니다</p>' : ''}
@@ -144,7 +146,7 @@ async function vBoard(slug, q) {
   const path = all ? '#/all' : `#/b/${slug}`;
   const base = (p) => `${path}?page=${p}${s ? `&q=${encodeURIComponent(s)}` : ''}`;
   return shell(all ? '전체 게시판' : b.name, all ? '모든 게시판의 글을 모아 봅니다' : b.description, '#/', `
-    <div class="tabs"><a class="${all ? 'on' : ''}" href="#/all">전체</a>${boards.map((x) => `<a class="${x.slug === slug ? 'on' : ''}" href="#/b/${esc(x.slug)}">${esc(x.name)}</a>`).join('')}</div>
+    <div class="tabs"><a class="${all ? 'on' : ''}" href="#/all">전체</a>${boards.map((x) => `<a class="${x.slug === slug ? 'on' : ''}" style="${ac(x.id)}" href="#/b/${esc(x.slug)}">${esc(x.name)}</a>`).join('')}</div>
     <div class="bar">
       <form class="search" data-form="bsearch" data-path="${path}"><input name="q" value="${esc(s)}" placeholder="제목·내용 검색" aria-label="검색"><button>검색</button></form>
       <span class="count">총 <b>${total}</b>건${s ? ` · “${esc(s)}”` : ''}</span>
@@ -152,7 +154,7 @@ async function vBoard(slug, q) {
         : `<span class="hint">${me ? '관리자 전용' : '<a href="#/login">로그인</a> 후 작성'}</span>`) : ''}
     </div>
     ${postList(items, { showBoard: all, type: b?.type })}
-    ${pager(total, page, size, base)}`);
+    ${pager(total, page, size, base)}`, b ? ac(b.id) : '');
 }
 
 async function vPost(id) {
@@ -180,7 +182,7 @@ async function vPost(id) {
         ${me && (me.id === c.author_id || adm) ? `<button data-act="delcmt" data-id="${c.id}">삭제</button>` : ''}</p><div>${esc(c.content)}</div></div>`).join('')}
       ${me ? `<form class="cform" data-form="comment" data-id="${p.id}"><textarea name="content" rows="3" maxlength="2000" placeholder="${qna ? '답변' : '댓글'}을 입력하세요" required></textarea><button class="btn">등록</button></form>`
         : `<p class="hint"><a href="#/login">로그인</a> 후 ${qna ? '답변' : '댓글'}을 작성할 수 있습니다.</p>`}
-    </section>`);
+    </section>`, ac(p.board_id));
 }
 
 async function vWrite(slug, editId) {
