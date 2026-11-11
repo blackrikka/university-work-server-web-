@@ -2,12 +2,34 @@
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const fail = (m) => { throw new Error(m); };
-const validUrl = (u) => !u || /^https?:\/\/\S+$/i.test(u);
+const validUrl = (u) => !u || /^https?:\/\/\S+$/i.test(u) || /^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/.test(u);
+const MAX_BYTES = 5 * 1024 * 1024;
+
+// 첨부 이미지 검사 + 큰 이미지는 축소(JPEG)해서 용량을 줄인다. GIF 는 움직임 보존을 위해 그대로 둔다.
+async function prepImage(file, maxSide) {
+  if (!/^image\/(png|jpeg|gif|webp)$/.test(file?.type || '')) fail('PNG · JPG · GIF · WEBP 이미지만 첨부할 수 있습니다.');
+  if (file.type !== 'image/gif') {
+    try {
+      const bmp = await createImageBitmap(file);
+      const k = Math.min(1, maxSide / Math.max(bmp.width, bmp.height));
+      if (k < 1 || file.size > 1024 * 1024) {
+        const c = document.createElement('canvas');
+        c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+        const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(bmp, 0, 0, c.width, c.height);
+        const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.85));
+        if (blob && blob.size < file.size) return blob;
+      }
+    } catch { /* 축소 실패 시 원본 사용 */ }
+  }
+  if (file.size > MAX_BYTES) fail('이미지는 5MB 이하만 첨부할 수 있습니다.');
+  return file;
+}
+const EXT = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' };
 
 function checkPost({ title, content, image_url }) {
   if (!title?.trim()) fail('제목을 입력하세요.');
   if (!content?.trim()) fail('내용을 입력하세요.');
-  if (!validUrl(image_url)) fail('이미지 주소는 http(s):// 로 시작해야 합니다.');
+  if (!validUrl(image_url)) fail('첨부 이미지가 올바르지 않습니다.');
 }
 function checkSignUp({ email, password, nickname }) {
   if (!/^\S+@\S+\.\S+$/.test(email || '')) fail('이메일 형식이 올바르지 않습니다.');
@@ -80,6 +102,16 @@ function makeLocal() {
       localStorage.setItem(SKEY, u.id);
     },
     async signOut() { localStorage.removeItem(SKEY); },
+    async uploadImage(file) {
+      need();
+      const blob = await prepImage(file, 1000);
+      if (blob.size > 1024 * 1024) fail('데모 모드에서는 1MB 이하 이미지만 첨부할 수 있습니다.');
+      return new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result); r.onerror = () => rej(new Error('이미지를 읽지 못했습니다.'));
+        r.readAsDataURL(blob);
+      });
+    },
     async listBoards() { return [...db.boards].sort((a, b) => a.sort - b.sort); },
     async createBoard(f) {
       needAdmin(); checkBoard(f);
@@ -187,6 +219,13 @@ async function makeRemote() {
     comment_count: r.comments?.[0]?.count ?? 0, like_count: r.likes?.[0]?.count ?? 0,
   });
   const cnt = async (q) => (await q).count || 0;
+  const BUCKET = 'images', PUB = `/storage/v1/object/public/${BUCKET}/`;
+  // 글에서 빠진 첨부 파일 정리 (본인 폴더만 지워지며, 실패해도 무시)
+  const dropImage = async (url) => {
+    const i = (url || '').indexOf(PUB); if (i < 0) return;
+    try { await sb.storage.from(BUCKET).remove([decodeURIComponent(url.slice(i + PUB.length))]); } catch { /* 무시 */ }
+  };
+  const imageOf = async (id) => (await sb.from('posts').select('image_url').eq('id', id).maybeSingle()).data?.image_url || '';
 
   return {
     mode: 'supabase',
@@ -205,6 +244,15 @@ async function makeRemote() {
     },
     async signIn({ email, password }) { ok(await sb.auth.signInWithPassword({ email, password })); },
     async signOut() { await sb.auth.signOut(); },
+    async uploadImage(file) {
+      const u = await need();
+      const blob = await prepImage(file, 1600);
+      const path = `${u}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${EXT[blob.type] || 'jpg'}`;
+      const { error } = await sb.storage.from(BUCKET).upload(path, blob, { contentType: blob.type, cacheControl: '31536000' });
+      if (error) fail(/bucket not found/i.test(error.message) ? '이미지 저장소가 없습니다. supabase/storage.sql 을 실행하세요.'
+        : /row-level security|unauthorized/i.test(error.message) ? '이미지 업로드 권한이 없습니다.' : error.message);
+      return sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+    },
     async listBoards() { return ok(await sb.from('boards').select('*').order('sort')); },
     async createBoard(f) {
       checkBoard(f);
@@ -237,10 +285,12 @@ async function makeRemote() {
     },
     async updatePost(id, f) {
       await need(); checkPost(f);
+      const old = await imageOf(id);
       ok(await sb.from('posts').update({ title: f.title.trim(), content: f.content, image_url: f.image_url || '',
         updated_at: new Date().toISOString() }).eq('id', id));
+      if (old && old !== (f.image_url || '')) await dropImage(old);
     },
-    async deletePost(id) { await need(); ok(await sb.from('posts').delete().eq('id', id)); },
+    async deletePost(id) { await need(); const old = await imageOf(id); ok(await sb.from('posts').delete().eq('id', id)); await dropImage(old); },
     async listComments(postId) {
       return ok(await sb.from('comments').select('*,author:profiles(nickname)').eq('post_id', postId).order('created_at'))
         .map((c) => ({ ...c, author_name: c.author?.nickname || '탈퇴회원' }));

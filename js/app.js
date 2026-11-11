@@ -2,7 +2,7 @@ import { store } from './store.js';
 
 const $app = document.getElementById('app');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const safeImg = (u) => (/^https?:\/\/\S+$/i.test(u || '') ? u : '');
+const safeImg = (u) => (/^https?:\/\/\S+$/i.test(u || '') || /^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/.test(u || '') ? u : '');
 const fmt = (iso) => {
   const d = new Date(iso), n = new Date(), p = (x) => String(x).padStart(2, '0');
   return d.toDateString() === n.toDateString() ? `${p(d.getHours())}:${p(d.getMinutes())}`
@@ -198,7 +198,11 @@ async function vWrite(slug, editId) {
   return shell(editId ? '글 수정' : '글쓰기', b.name, editId ? `#/p/${editId}` : `#/b/${b.slug}`, `
     <form class="form wide" data-form="post" data-board="${b.id}" data-edit="${editId || ''}">
       <label>제목<input name="title" maxlength="100" required value="${esc(p?.title)}"></label>
-      <label>이미지 주소 <small>${b.type === 'gallery' ? '갤러리 썸네일로 표시됩니다' : '선택'} · https://…</small><input name="image_url" type="url" value="${esc(p?.image_url)}" placeholder="https://example.com/image.png"></label>
+      <div class="attach"><label>이미지 첨부 <small>${b.type === 'gallery' ? '갤러리 썸네일로 표시됩니다' : '선택'} · PNG, JPG, GIF, WEBP · 5MB 이하</small>
+        <input name="image" type="file" accept="image/png,image/jpeg,image/gif,image/webp"></label>
+        <input name="image_url" type="hidden" value="${esc(safeImg(p?.image_url))}">
+        <div class="preview"${safeImg(p?.image_url) ? '' : ' hidden'}><img src="${esc(safeImg(p?.image_url))}" alt="첨부 이미지 미리보기"><button type="button" class="btn ghost danger" data-act="rmimg">첨부 삭제</button></div>
+      </div>
       <label>내용<textarea name="content" rows="12" maxlength="20000" required>${esc(p?.content)}</textarea></label>
       <div class="acts"><span class="sp"></span><a class="btn ghost" href="${editId ? `#/p/${editId}` : `#/b/${b.slug}`}">취소</a><button class="btn">${editId ? '수정 완료' : '등록'}</button></div>
     </form>`);
@@ -288,6 +292,8 @@ const FORMS = {
   },
   async post(f, el) {
     const edit = +el.dataset.edit;
+    if (f.image?.size) f.image_url = await store.uploadImage(f.image);
+    delete f.image;
     if (edit) { await store.updatePost(edit, f); go(`#/p/${edit}`); }
     else go(`#/p/${await store.createPost(+el.dataset.board, f)}`);
   },
@@ -295,6 +301,11 @@ const FORMS = {
   async board(f) { await store.createBoard(f); toast('게시판을 추가했습니다.'); render(); },
 };
 const ACTS = {
+  async rmimg(d, el) {
+    const box = el.closest('.attach');
+    box.querySelector('[name=image]').value = ''; box.querySelector('[name=image_url]').value = '';
+    box.querySelector('.preview').hidden = true;
+  },
   async logout() { await store.signOut(); toast('로그아웃되었습니다.'); go('#/'); },
   async like(d) { if (!me) return go('#/login'); await store.toggleLike(+d.id); keepScroll(); },
   async delpost(d) { if (confirm('이 글을 삭제할까요?')) { await store.deletePost(+d.id); toast('삭제했습니다.'); go(`#/b/${d.slug}`); } },
@@ -314,7 +325,13 @@ document.addEventListener('submit', async (e) => {
 });
 document.addEventListener('click', async (e) => {
   const el = e.target.closest('[data-act]'); if (!el) return;
-  try { await ACTS[el.dataset.act](el.dataset); } catch (err) { toast(err.message, true); }
+  try { await ACTS[el.dataset.act](el.dataset, el); } catch (err) { toast(err.message, true); }
+});
+document.addEventListener('change', (e) => {
+  if (!e.target.matches('.attach [name=image]')) return;
+  const box = e.target.closest('.attach'), file = e.target.files[0], pv = box.querySelector('.preview');
+  if (!file) return;
+  pv.querySelector('img').src = URL.createObjectURL(file); pv.hidden = false;
 });
 window.addEventListener('hashchange', render);
 render();

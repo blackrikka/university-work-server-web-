@@ -8,7 +8,7 @@ GitHub Pages로 호스팅하고 Supabase(무료)를 데이터 서버로 쓰는 �
 - 이메일·비밀번호 회원가입 / 로그인 / 로그아웃
 - 다중 게시판: 일반 목록 · 갤러리 · Q&A 형태, 게시판별 글쓰기 권한(회원 / 관리자만)
 - 전체 게시판(통합 보기)과 통합 검색, 게시판 내 검색, 페이지네이션
-- 글 작성·수정·삭제, 댓글, 좋아요, 조회수
+- 글 작성·수정·삭제, 이미지 파일 첨부, 댓글, 좋아요, 조회수
 - 관리자: 게시판 추가·삭제, 모든 글·댓글 삭제
 - 로비 화면: 플레이어 카드(레벨·EXP), 통계, 공지, 최신글, 게시판 독
 - 브라운관(CRT) 녹색 단색 모니터 풍 테마
@@ -24,6 +24,7 @@ GitHub Pages로 호스팅하고 Supabase(무료)를 데이터 서버로 쓰는 �
 
 1. <https://supabase.com> 에서 프로젝트를 만듭니다.
 2. **SQL Editor**에 `supabase/schema.sql` 전체를 붙여넣고 실행합니다.
+   이어서 `supabase/storage.sql`도 실행합니다(이미지 첨부용 저장소).
 3. **Project Settings → API**에서 `Project URL`과 `anon public` 키를 복사해 `js/config.js`에 넣습니다.
    (`service_role` 키는 절대 넣지 마세요.)
 4. 사이트에서 회원가입한 뒤, SQL Editor에서 본인을 관리자로 지정합니다.
@@ -55,4 +56,5 @@ js/config.js          Supabase 설정
 js/store.js           데이터 계층 (Supabase / 데모 어댑터)
 js/app.js             라우터와 화면
 supabase/schema.sql   테이블 · RLS 정책 · 기본 게시판
+supabase/storage.sql  이미지 첨부 저장소(버킷) · 업로드 정책
 ```
