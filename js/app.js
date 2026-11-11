@@ -229,6 +229,9 @@ async function vMe(q) {
     <div class="mecard"><span class="lv big"><small>Lv.</small>${1 + Math.floor((ms.posts * 10 + ms.comments * 3) / 30)}</span>
       <div><h2>${esc(me.nickname)}${me.role === 'admin' ? ' <span class="tag done">관리자</span>' : ''}</h2>
       <p>${esc(me.email)} · 가입 ${fmt(me.created_at)}</p><p>작성 글 <b>${ms.posts}</b> · 댓글 <b>${ms.comments}</b></p></div></div>
+    <h3 class="sec">닉네임 변경</h3>
+    <form class="nick" data-form="nickname"><input name="nickname" value="${esc(me.nickname)}" minlength="2" maxlength="16" aria-label="새 닉네임" required><button class="btn">변경</button></form>
+    <p class="hint">공백 없이 2~16자. 이전에 쓴 글과 댓글의 작성자 이름도 함께 바뀝니다.</p>
     <h3 class="sec">내가 쓴 글</h3>
     ${postList(items, { showBoard: true })}${pager(total, page, 10, (p) => `#/me?page=${p}`)}`);
 }
@@ -298,6 +301,7 @@ const FORMS = {
     else go(`#/p/${await store.createPost(+el.dataset.board, f)}`);
   },
   async comment(f, el) { await store.addComment(+el.dataset.id, f.content); render(); },
+  async nickname(f) { await store.updateNickname(f.nickname); toast('닉네임을 변경했습니다.'); render(); },
   async board(f) { await store.createBoard(f); toast('게시판을 추가했습니다.'); render(); },
 };
 const ACTS = {

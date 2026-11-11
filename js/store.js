@@ -36,6 +36,7 @@ function checkSignUp({ email, password, nickname }) {
   if ((password || '').length < 6) fail('비밀번호는 6자 이상이어야 합니다.');
   if (!/^\S{2,16}$/.test(nickname || '')) fail('닉네임은 공백 없이 2~16자여야 합니다.');
 }
+function checkNick(n) { if (!/^\S{2,16}$/.test(n || '')) fail('닉네임은 공백 없이 2~16자여야 합니다.'); }
 function checkBoard({ slug, name }) {
   if (!/^[a-z0-9-]{2,20}$/.test(slug || '')) fail('주소(slug)는 영문 소문자·숫자·하이픈 2~20자입니다.');
   if (!name?.trim()) fail('게시판 이름을 입력하세요.');
@@ -102,6 +103,12 @@ function makeLocal() {
       localStorage.setItem(SKEY, u.id);
     },
     async signOut() { localStorage.removeItem(SKEY); },
+    async updateNickname(n) {
+      const u = need(); n = (n || '').trim(); checkNick(n);
+      if (n === u.nickname) return;
+      if (db.users.some((x) => x.nickname === n)) fail('이미 사용 중인 닉네임입니다.');
+      u.nickname = n; save();
+    },
     async uploadImage(file) {
       need();
       const blob = await prepImage(file, 1000);
@@ -244,6 +251,12 @@ async function makeRemote() {
     },
     async signIn({ email, password }) { ok(await sb.auth.signInWithPassword({ email, password })); },
     async signOut() { await sb.auth.signOut(); },
+    async updateNickname(n) {
+      const u = await need(); n = (n || '').trim(); checkNick(n);
+      const { data, error } = await sb.from('profiles').update({ nickname: n }).eq('id', u).select('id');
+      if (error) fail(/duplicate key/i.test(error.message) ? '이미 사용 중인 닉네임입니다.' : error.message);
+      if (!data?.length) fail('닉네임을 변경하지 못했습니다.');
+    },
     async uploadImage(file) {
       const u = await need();
       const blob = await prepImage(file, 1600);
